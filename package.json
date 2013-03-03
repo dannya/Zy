@@ -1,0 +1,41 @@
+{
+    "name": "zy",
+    "description": "A small and fast NodeJS routing and presentation web framework.",
+    "keywords": [
+        "routing",
+        "framework"
+    ],
+    "version": "0.1",
+    "main": "index",
+    "homepage": "http://dannya.com/",
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/dannyakakong/zy.git"
+    },
+    "author": {
+        "name": "Danny Allen",
+        "email": "me@dannya.com"
+    },
+    "licenses": [
+        {
+            "type": "MIT",
+            "url": "http://opensource.org/licenses/MIT"
+        }
+    ],
+    "engines": [
+        "node >=0.2.6"
+    ],
+    "dependencies": {
+        "http": "*",
+        "url": "*",
+        "fs": "*",
+        "path": "*",
+        "dot": "*"
+    },
+    "devDependencies": {
+        "jshint": "*"
+    },
+    "readmeFilename": "README.md",
+    "_id": "zy@0.1",
+    "_from": "zy@"
+}
