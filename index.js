@@ -1,7 +1,7 @@
 /*
 Zy
 A small and fast NodeJS routing and presentation web framework.
-Version 0.1
+Version 0.2
 
 Copyright (C) 2013 Danny Allen <me@dannya.com>
 
@@ -22,6 +22,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 // initialize internal Zy namespace
 var Zy = {};
 
+
 // import Zy requirements
 Zy.lib = {
     http:     require('http'),
@@ -29,21 +30,107 @@ Zy.lib = {
     fs:       require('fs'),
     path:     require('path'),
     dot:      require('dot')
-}
+};
 
 
-// patch external url.parse to make it more appropriate for our needs
-Zy.lib.url._parse = Zy.lib.url.parse;
-Zy.lib.url.parse = function (url, bool) {
-    var parts = Zy.lib.url._parse(url, bool);
+// initialise default config
+// Note: you shouldn't need to change these values, instead override them in the config object passed into Zy.start()
+Zy.config = {
+    port:   8000,
 
-    // ensure pathname always ends in a slash, for ease of comparison
-    if (parts.pathname[parts.pathname.length - 1] !== '/') {
-        parts.pathname += '/';
+    routes: {
+        '/': function () {
+            return 'Welcome to Zy!';
+        },
+
+        403: function () {
+            return '403';
+        },
+        404: function () {
+            return '404';
+        },
+        500: function () {
+            return '500';
+        }
+    },
+
+    contentType: {
+        '.txt':     'text/plain',
+        '.css':     'text/css',
+        '.js':      'text/javascript',
+
+        '.png':     'image/png',
+        '.gif':     'image/gif',
+        '.jpg':     'image/jpeg',
+        '.jpeg':    'image/jpeg',
+        '.svg':     'image/svg+xml',
+
+        '.pdf':     'application/pdf'
     }
+};
 
-    return parts;
-}
+
+// define utility functions
+Zy.util = {
+    merge: function (obj1, obj2) {
+        for (var k in obj2) {
+            try {
+                if (typeof obj2[k] === 'object') {
+                    obj1[k] = Zy.util.merge(obj1[k], obj2[k]);
+
+                } else {
+                    obj1[k] = obj2[k];
+
+                }
+
+            } catch (e) {
+                obj1[k] = obj2[k];
+            }
+        }
+
+        return obj1;
+    }
+};
+
+
+// define routing functionality
+Zy.routing = {
+    get: function (id) {
+        return Zy.config.routes[id] || Zy.config.routes[404] || Zy.config.routes['/'];
+    }
+};
+
+
+// define location functionality
+Zy.location = {
+    FILE:       1,
+    DIRECTORY:  2,
+
+    type: function (string) {
+        return (string.indexOf('.') === -1) ?
+            Zy.location.DIRECTORY :
+            Zy.location.FILE;
+    },
+
+    path: function (path) {
+        var path = path.split('/');
+        path.pop();
+
+        return path.join('/');
+    },
+
+    // wrap external url.parse to make it more appropriate for our needs
+    parse: function (url, bool) {
+        var parts = Zy.lib.url.parse(url, bool);
+
+        // ensure directory pathname always ends in a slash, for ease of comparison
+        if ((parts.pathname[parts.pathname.length - 1] !== '/') && (Zy.location.type(parts.pathname) === Zy.location.DIRECTORY)) {
+            parts.pathname += '/';
+        }
+
+        return parts;
+    }
+};
 
 
 // define output functionality
@@ -94,18 +181,28 @@ Zy.output = {
             if (exists) {
                 Zy.lib.fs.readFile(filename, function (error, content) {
                     if (!error) {
+                        // no error, execute 200 callback
                         params[200](content, data);
 
                     } else {
-                        console.log('error');
-                        response.writeHead(500);
-                        response.end();
+                        // send 500 response
+                        Zy.output.send(
+                            Zy.routes.get(500),
+                            {
+                                'content':  content
+                            }
+                        );
                     }
                 });
 
             } else {
-                response.writeHead(404);
-                response.end();
+                // send 404 response
+                Zy.output.send(
+                    Zy.routes.get(404),
+                    {
+                        'content':  content
+                    }
+                );
             }
         });
     },
@@ -128,18 +225,39 @@ Zy.output = {
 
 // define server start functionality
 Zy.start = function (config) {
+    // merge specified config into default config, overwriting where provided
+    Zy.config = Zy.util.merge(Zy.config, config);
+
+
     // setup server
     Zy.lib.http
         .createServer(function (request, response) {
             // parse URL into useful parts
-            var url = Zy.lib.url.parse(request.url, true);
+            var url = Zy.location.parse(request.url, true);
 
             // look for specified route...
-            var output = config.routes[url.pathname];
+            var output = Zy.config.routes[url.pathname];
 
             if (typeof output === 'undefined') {
-                // route not found, default to 404 page
-                output = config.routes[404];
+                // route not found, check if reference is to an allowable file location...
+                if (Zy.location.type(url.pathname) === Zy.location.FILE) {
+                    // a file...
+                    // - check if it is in an allowable location? (default: yes)
+                    if ((typeof Zy.config.safeDirectories !== 'object') ||
+                        (typeof Zy.config.safeDirectories[Zy.location.path(url.pathname)] !== 'undefined')) {
+
+                        // an allowable location, modify to a retrievable reference
+                        output = '.' + url.pathname;
+
+                    } else {
+                        // not an allowable location
+                        output = Zy.routing.get(403);
+                    }
+
+                } else {
+                    // not a file, default to 404 page
+                    output = Zy.routing.get(404);
+                }
             }
 
 
@@ -153,15 +271,13 @@ Zy.start = function (config) {
                     output,
                     {
                         200: function (content) {
-                            // check content type
-                            var contentType,
-                                ext = Zy.lib.path.extname(output);
+                            // get content type
+                            var ext         = Zy.lib.path.extname(output),
+                                contentType = Zy.config.contentType[ext];
 
-                            if (ext === '.js') {
-                                contentType = 'text/javascript';
-
-                            } else if (ext === '.css') {
-                                contentType = 'text/css';
+                            if (typeof contentType !== 'string') {
+                                // not found in contentType mapping, default to HTML
+                                contentType = 'text/html';
                             }
 
                             // - send output
@@ -170,7 +286,7 @@ Zy.start = function (config) {
                                 {
                                     'content':  content,
                                     'params':   {
-                                        'Content-Type': contentType || 'text/html'
+                                        'Content-Type': contentType
                                     }
                                 }
                             );
@@ -219,12 +335,12 @@ Zy.start = function (config) {
                 }
             }
         })
-        .listen(config.port);
+        .listen(Zy.config.port);
 
 
     // inform that server has started on specified port
-    console.log('Server running at http://127.0.0.1:' + config.port);
-}
+    console.log('Server running at http://127.0.0.1:' + Zy.config.port);
+};
 
 
 // make Zy accessible as an imported Node module

@@ -5,7 +5,7 @@
         "routing",
         "framework"
     ],
-    "version": "0.1",
+    "version": "0.2",
     "main": "index",
     "homepage": "http://dannya.com/",
     "repository": {
@@ -26,10 +26,7 @@
         "node >=0.2.6"
     ],
     "dependencies": {
-        "http": "*",
         "url": "*",
-        "fs": "*",
-        "path": "*",
         "dot": "*"
     },
     "devDependencies": {
