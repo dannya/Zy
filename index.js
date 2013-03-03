@@ -187,7 +187,7 @@ Zy.output = {
                     } else {
                         // send 500 response
                         Zy.output.send(
-                            Zy.routes.get(500),
+                            Zy.routing.get(500),
                             {
                                 'content':  content
                             }
@@ -198,7 +198,7 @@ Zy.output = {
             } else {
                 // send 404 response
                 Zy.output.send(
-                    Zy.routes.get(404),
+                    Zy.routing.get(404),
                     {
                         'content':  content
                     }
