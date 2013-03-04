@@ -54,10 +54,11 @@ Zy.config = {
     },
 
     contentType: {
-        '.txt':     'text/plain',
         '.css':     'text/css',
         '.js':      'text/javascript',
+        '.txt':     'text/plain',
 
+        '.ico':     'image/x-icon',
         '.png':     'image/png',
         '.gif':     'image/gif',
         '.jpg':     'image/jpeg',
