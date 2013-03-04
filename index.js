@@ -177,10 +177,7 @@ Zy.output = {
                     } else {
                         // send 500 response
                         Zy.output.send(
-                            Zy.routing.get(500),
-                            {
-                                'content':  content
-                            }
+                            Zy.routing.get(500)
                         );
                     }
                 });
@@ -188,10 +185,7 @@ Zy.output = {
             } else {
                 // send 404 response
                 Zy.output.send(
-                    Zy.routing.get(404),
-                    {
-                        'content':  content
-                    }
+                    Zy.routing.get(404)
                 );
             }
         });
