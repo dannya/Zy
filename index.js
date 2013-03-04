@@ -1,7 +1,7 @@
 /*
 Zy
 A small and fast NodeJS routing and presentation web framework.
-Version 0.2
+Version 0.2.1
 
 Copyright (C) 2013 Danny Allen <me@dannya.com>
 
@@ -28,8 +28,7 @@ Zy.lib = {
     http:     require('http'),
     url:      require('url'),
     fs:       require('fs'),
-    path:     require('path'),
-    dot:      require('dot')
+    path:     require('path')
 };
 
 
@@ -136,21 +135,11 @@ Zy.location = {
 // define output functionality
 Zy.output = {
     FILE:       1,
-    TEMPLATE:   2,
-    FUNCTION:   3,
+    FUNCTION:   2,
 
     type: function (output) {
         if (typeof output === 'string') {
-            var ext = Zy.lib.path.extname(output);
-
-            if (ext === '.tpl') {
-                return Zy.output.TEMPLATE;
-            } else {
-                return Zy.output.FILE;
-            }
-
-        } else if (typeof output === 'object') {
-            return Zy.output.TEMPLATE;
+            return Zy.output.FILE;
 
         } else if (typeof output === 'function') {
             return Zy.output.FUNCTION;
@@ -288,28 +277,6 @@ Zy.start = function (config) {
                                     'params':   {
                                         'Content-Type': contentType
                                     }
-                                }
-                            );
-                        }
-                    }
-                );
-
-
-            } else if (outputType === Zy.output.TEMPLATE) {
-                // template...
-                // - load template file
-                var content = Zy.output.load(
-                    output,
-                    {
-                        200: function (content, data) {
-                            // - insert data into template
-                            var rendered = Zy.lib.dot.template(content)(data);
-
-                            // - send output
-                            Zy.output.send(
-                                response,
-                                {
-                                    'content': rendered
                                 }
                             );
                         }

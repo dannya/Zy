@@ -5,7 +5,7 @@ A small and fast NodeJS routing and presentation web framework.
 
 How to use
 ----------
-```
+```javascript
 // import Zy
 var Zy = require('zy').Zy;
 
