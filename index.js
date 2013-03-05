@@ -147,7 +147,7 @@ Zy.output = {
         }
     },
 
-    load: function (output, params) {
+    load: function (response, output, params) {
         // process output data structure?
         var data,
             filename = output;
@@ -177,7 +177,7 @@ Zy.output = {
                     } else {
                         // send 500 response
                         Zy.output.send(
-                            Zy.routing.get(500),
+                            response,
                             {
                                 code: 500
                             }
@@ -188,7 +188,7 @@ Zy.output = {
             } else {
                 // send 404 response
                 Zy.output.send(
-                    Zy.routing.get(404),
+                    response,
                     {
                         code: 404
                     }
@@ -258,6 +258,7 @@ Zy.start = function (config) {
                 // file...
                 // - load file
                 var content = Zy.output.load(
+                    response,
                     output,
                     {
                         200: function (content) {
