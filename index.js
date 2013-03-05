@@ -156,12 +156,12 @@ Zy.output = {
             if (typeof output.length === 'number') {
                 // array
                 filename    = output[0],
-                    data    = output[1];
+                data        = output[1];
 
             } else {
                 // object
                 filename    = output.filename,
-                    data    = output.data;
+                data        = output.data;
             }
         }
 
