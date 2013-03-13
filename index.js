@@ -204,6 +204,44 @@ Zy.output = {
 };
 
 
+// define scripting functionality
+Zy.scripting = {
+    iterateFilePath: function (filepath, theFilter, group, individual) {
+        // if filter is not expressed as a function, assume file extension string and create function
+        if (typeof theFilter == 'string') {
+            var filterString = theFilter;
+
+            theFilter = function (filename) {
+                return (filename.substr(-filterString.length) == filterString);
+            };
+        }
+
+        // iterate
+        Zy.lib.fs.readdir(
+            filepath,
+            function (err, files) {
+                if ((typeof files == 'object') && (files.length > 0)) {
+                    var filtered = files.filter(theFilter);
+
+                    if (filtered.length > 0) {
+                        // execute group, or individual callback?
+                        if (typeof group == 'function') {
+                            group(filepath, filtered);
+                        }
+
+                        if (typeof individual == 'function') {
+                            filtered.forEach(function (file) {
+                                individual(filepath + file);
+                            });
+                        }
+                    }
+                }
+            }
+        );
+    }
+};
+
+
 // define server start functionality
 Zy.start = function (config) {
     // merge specified config into default config, overwriting where provided
