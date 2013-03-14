@@ -238,6 +238,19 @@ Zy.scripting = {
                 }
             }
         );
+    },
+
+    touchFiles: function (filepaths) {
+        var fd,
+            date = new Date();
+
+        // iterate through filepaths...
+        for (var i = 0, len = filepaths.length; i < len; i++) {
+            fd = Zy.lib.fs.openSync(filepaths[i], 'r');
+
+            // set file time
+            Zy.lib.fs.futimes(fd, date, date);
+        }
     }
 };
 
