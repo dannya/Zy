@@ -1,7 +1,7 @@
 /*
 Zy
 A small and fast NodeJS routing and presentation web framework.
-Version 0.2.1
+Version 0.3
 
 Copyright (C) 2013 Danny Allen <me@dannya.com>
 
@@ -35,7 +35,23 @@ Zy.lib = {
 // initialise default config
 // Note: you shouldn't need to change these values, instead override them in the config object passed into Zy.start()
 Zy.config = {
-    port:   8000,
+    port:       8000,
+
+    location: {
+        original: {
+            style:      '/css/',
+            script:     '/js/',
+            images:     '/img/',
+            templates:  '/templates/'
+        },
+
+        minified: {
+            style:      '/css/min/',
+            script:     '/js/min/',
+            images:     '/img/',
+            templates:  '/templates/min/'
+        }
+    },
 
     routes: {
         '/': function () {
@@ -58,6 +74,13 @@ Zy.config = {
         '.js':      'text/javascript',
         '.txt':     'text/plain'
     }
+};
+
+
+// define environment variables
+Zy.env = {
+    live: (typeof process.env.HOME != 'undefined'),
+    root: (typeof process.env.HOME != 'undefined') ? process.env.HOME + '/' : ''
 };
 
 
@@ -157,6 +180,37 @@ Zy.output = {
         }
 
 
+        // send minified file?
+        if (Zy.env.live && (filename.indexOf('_min.html') === -1)) {
+            var minified = filename.replace('.html', '_min.html');
+
+            // process minified output
+            Zy.output._output(response, minified, params, data, function (response) {
+                // if minified file not found, process original output
+                Zy.output._output(response, filename, params, data);
+            });
+
+        } else {
+            // process original output
+            Zy.output._output(response, filename, params, data);
+        }
+    },
+
+    send: function (response, params) {
+        response.writeHead(
+            (typeof params.code === 'number')   ? params.code   : 200,
+            (typeof params.params === 'object') ? params.params : {}
+        );
+
+        if (typeof params.content !== 'undefined') {
+            response.end(params.content, 'utf-8');
+        } else {
+            response.end();
+        }
+
+    },
+
+    _output: function (response, filename, params, data, onerror) {
         // check that file exists
         Zy.lib.fs.exists(filename, function (exists) {
             if (exists) {
@@ -177,29 +231,21 @@ Zy.output = {
                 });
 
             } else {
-                // send 404 response
-                Zy.output.send(
-                    response,
-                    {
-                        code: 404
-                    }
-                );
+                // run error callback?
+                if (typeof onerror == 'function') {
+                    onerror(response);
+
+                } else {
+                    // send 404 response
+                    Zy.output.send(
+                        response,
+                        {
+                            code: 404
+                        }
+                    );
+                }
             }
         });
-    },
-
-    send: function (response, params) {
-        response.writeHead(
-            (typeof params.code === 'number')   ? params.code   : 200,
-            (typeof params.params === 'object') ? params.params : {}
-        );
-
-        if (typeof params.content !== 'undefined') {
-            response.end(params.content, 'utf-8');
-        } else {
-            response.end();
-        }
-
     }
 };
 
@@ -298,6 +344,9 @@ Zy.start = function (config) {
 
             if (outputType === Zy.output.FILE) {
                 // file...
+                // - prepend environment root
+                content = Zy.env.root + content;
+
                 // - load file
                 var content = Zy.output.load(
                     response,
