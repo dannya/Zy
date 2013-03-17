@@ -161,6 +161,21 @@ Zy.location = {
         return path.join('/');
     },
 
+    filepath: function (filepath) {
+        if (!Zy.env.live) {
+            // testing
+            if (filepath[0] === '/') {
+                filepath = filepath.substring(1);
+            }
+
+            return filepath;
+
+        } else {
+            // live
+            return Zy.env.root + filepath;
+        }
+    },
+
     // wrap external url.parse to make it more appropriate for our needs
     parse: function (url, bool) {
         var parts = Zy.lib.url.parse(url, bool);
@@ -213,20 +228,21 @@ Zy.output = {
             (filename.indexOf('.html') !== -1) &&
             (filename.indexOf(Zy.config.location.minified.templates) === -1)) {
 
+            // set location of minified file
             var minified = filename.replace(
                 Zy.config.location.original.templates,
                 Zy.config.location.minified.templates
             );
 
             // process minified output
-            Zy.output._output(response, minified, params, data, function (response) {
+            Zy.output._output(response, Zy.location.filepath(minified), params, data, function (response) {
                 // if minified file not found, process original output
-                Zy.output._output(response, filename, params, data);
+                Zy.output._output(response, Zy.location.filepath(filename), params, data);
             });
 
         } else {
             // process original output
-            Zy.output._output(response, filename, params, data);
+            Zy.output._output(response, Zy.location.filepath(filename), params, data);
         }
     },
 
@@ -413,17 +429,6 @@ Zy.start = function (config) {
 
             if (outputType === Zy.output.FILE) {
                 // file...
-                if (!Zy.env.live) {
-                    // testing
-                    if (output[0] === '/') {
-                        output = output.substring(1);
-                    }
-
-                } else {
-                    // live
-                    output = Zy.env.root + output;
-                }
-
                 // - load file
                 var content = Zy.output.load(
                     response,
