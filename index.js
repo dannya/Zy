@@ -23,6 +23,34 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 var Zy = {};
 
 
+// alias console debug
+var d = function (value, type) {
+    var prepend = '';
+
+    if (typeof type == 'string') {
+        if (type === 'w') {
+            // warn
+            prepend = '!! ';
+
+        } else if (type === 'i') {
+            // info
+            prepend = '() ';
+        }
+    }
+
+    // output
+    if ((typeof value == 'string') || (typeof value == 'number')) {
+        return console.log(prepend + value);
+
+    } else {
+        console.log(prepend);
+        console.log(value);
+
+        return true;
+    }
+};
+
+
 // import Zy requirements
 Zy.lib = {
     http:     require('http'),
@@ -80,7 +108,7 @@ Zy.config = {
 // define environment variables
 Zy.env = {
     live: (typeof process.env.HOME != 'undefined'),
-    root: (typeof process.env.HOME != 'undefined') ? process.env.HOME + '/' : ''
+    root: (typeof process.env.HOME != 'undefined') ? process.env.HOME : ''
 };
 
 
@@ -181,8 +209,14 @@ Zy.output = {
 
 
         // send minified file?
-        if (Zy.env.live && (filename.indexOf('_min.html') === -1)) {
-            var minified = filename.replace('.html', '_min.html');
+        if (Zy.env.live &&
+            (filename.indexOf('.html') !== -1) &&
+            (filename.indexOf(Zy.config.location.minified.templates) === -1)) {
+
+            var minified = filename.replace(
+                Zy.config.location.original.templates,
+                Zy.config.location.minified.templates
+            );
 
             // process minified output
             Zy.output._output(response, minified, params, data, function (response) {
@@ -379,8 +413,16 @@ Zy.start = function (config) {
 
             if (outputType === Zy.output.FILE) {
                 // file...
-                // - prepend environment root
-                content = Zy.env.root + content;
+                if (!Zy.env.live) {
+                    // testing
+                    if (output[0] === '/') {
+                        output = output.substring(1);
+                    }
+
+                } else {
+                    // live
+                    output = Zy.env.root + output;
+                }
 
                 // - load file
                 var content = Zy.output.load(
