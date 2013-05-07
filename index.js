@@ -56,7 +56,8 @@ Zy.lib = {
     http:     require('http'),
     url:      require('url'),
     fs:       require('fs'),
-    path:     require('path')
+    path:     require('path'),
+    template: require('dot')
 };
 
 
@@ -193,11 +194,17 @@ Zy.location = {
 // define output functionality
 Zy.output = {
     FILE:       1,
-    FUNCTION:   2,
+    TEMPLATE:   2,
+    FUNCTION:   3,
 
     type: function (output) {
         if (typeof output === 'string') {
-            return Zy.output.FILE;
+            if (output.indexOf('.dot') !== -1) {
+                return Zy.output.TEMPLATE;
+
+            } else {
+                return Zy.output.FILE;
+            }
 
         } else if (typeof output === 'function') {
             return Zy.output.FUNCTION;
@@ -258,6 +265,48 @@ Zy.output = {
             response.end();
         }
 
+    },
+
+    _template_cache: { },
+
+    _output_template: function (response, path, tokens) {
+        if (typeof Zy.output._template_cache[path] != 'function') {
+            // cache template to a function, then serve it
+            Zy.output._output(
+                response,
+                Zy.location.filepath(path),
+                {
+                    200: function (content, tokens) {
+                        // - load template, compile to function and cache
+                        Zy.output._template_cache[path] = Zy.lib.template.template(content);
+
+                        // - send output
+                        Zy.output.send(
+                            response,
+                            {
+                                'content':  Zy.output._template_cache[path](tokens),
+                                'params':   {
+                                    'Content-Type': 'text/html'
+                                }
+                            }
+                        );
+                    }
+                },
+                tokens
+            );
+
+        } else {
+            // serve ready-cached template
+            Zy.output.send(
+                response,
+                {
+                    'content':  Zy.output._template_cache[path](tokens),
+                    'params':   {
+                        'Content-Type': 'text/html'
+                    }
+                }
+            );
+        }
     },
 
     _output: function (response, filename, params, data, onerror) {
@@ -458,6 +507,13 @@ Zy.start = function (config) {
                     }
                 );
 
+            } else if (outputType === Zy.output.TEMPLATE) {
+                // template...
+                Zy.output._output_template(
+                    response,
+                    output,
+                    { }
+                );
 
             } else if (outputType === Zy.output.FUNCTION) {
                 // function...
