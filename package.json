@@ -5,7 +5,7 @@
         "routing",
         "framework"
     ],
-    "version": "0.3",
+    "version": "0.4",
     "main": "index",
     "homepage": "http://dannya.com/",
     "repository": {
@@ -32,6 +32,6 @@
         "jshint": "*"
     },
     "readmeFilename": "README.md",
-    "_id": "zy@0.3",
+    "_id": "zy@0.4",
     "_from": "zy@"
 }

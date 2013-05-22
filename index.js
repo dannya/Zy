@@ -53,11 +53,12 @@ var d = function (value, type) {
 
 // import Zy requirements
 Zy.lib = {
-    http:     require('http'),
-    url:      require('url'),
-    fs:       require('fs'),
-    path:     require('path'),
-    template: require('dot')
+    http:       require('http'),
+    url:        require('url'),
+    fs:         require('fs'),
+    path:       require('path'),
+    async:      require('async'),
+    template:   require('dot')
 };
 
 
@@ -278,7 +279,7 @@ Zy.output = {
                 {
                     200: function (content, tokens) {
                         // - load template, compile to function and cache
-                        Zy.output._template_cache[path] = Zy.lib.template.template(content);
+                        Zy.output._template_cache[path] = Zy.lib.template.template(content, null, def);
 
                         // - send output
                         Zy.output.send(
@@ -309,14 +310,189 @@ Zy.output = {
         }
     },
 
-    _output: function (response, filename, params, data, onerror) {
+    _cache_structure: function (callback) {
+        var filename = Zy.location.filepath(Zy.config.location.original.templates + '/parts/structure.dot');
+
         // check that file exists
         Zy.lib.fs.exists(filename, function (exists) {
             if (exists) {
                 Zy.lib.fs.readFile(filename, function (error, content) {
                     if (!error) {
                         // no error, execute 200 callback
-                        params[200](content, data);
+                        callback(content);
+
+                    } else {
+                        // send 500 response
+                        Zy.output.send(
+                            response,
+                            {
+                                code: 500
+                            }
+                        );
+                    }
+                });
+            }
+        });
+    },
+
+    _output_structure: function (request, response, path, tokens) {
+        // if array of templates is specified, intercept
+        if (typeof path == 'object') {
+            return Zy.output._output_structure_array(request, response, path, tokens);
+        }
+
+
+        // cache / serve cache...
+        if (typeof Zy.output._template_cache[path] != 'function') {
+            // cache template to a function, then serve it
+            Zy.output._output(
+                response,
+                Zy.location.filepath(path),
+                {
+                    200: function (content, tokens) {
+                        Zy.output._cache_structure(function (structure) {
+                            // - load template, compile to function and cache
+                            Zy.output._template_cache[path] = Zy.lib.template.template(
+                                                                  structure,
+                                                                  null,
+                                                                  {
+                                                                      'content': content
+                                                                  }
+                                                              );
+
+                            // - send output
+                            Zy.output.send(
+                                response,
+                                {
+                                    'content':  Zy.output._template_cache[path](tokens),
+                                    'params':   {
+                                        'Content-Type': 'text/html'
+                                    }
+                                }
+                            );
+                        });
+                    }
+                },
+                tokens
+            );
+
+        } else {
+            // serve ready-cached template
+            Zy.output.send(
+                response,
+                {
+                    'content':  Zy.output._template_cache[path](tokens),
+                    'params':   {
+                        'Content-Type': 'text/html'
+                    }
+                }
+            );
+        }
+    },
+
+    _output_structure_array: function (request, response, path, tokens) {
+        // if array of templates is not specified, intercept
+        if (typeof path != 'object') {
+            return Zy.output._output_structure(request, response, path, tokens);
+        }
+
+        // parse url
+        var url = Zy.location.parse(request.url, true);
+
+        // cache / serve cache...
+        if (typeof Zy.output._template_cache[url.pathname] != 'function') {
+            // cache all templates to functions, then serve
+            var stack = [];
+
+            for (var i in path) {
+                if (typeof Zy.output._template_cache[path[i]] != 'function') {
+                    (function (tpl) {
+                        stack.push(function (onsuccess) {
+                            Zy.output._output(
+                                response,
+                                Zy.location.filepath(tpl),
+                                {
+                                    200: function (content, tokens, onsuccess) {
+                                        Zy.output._template_cache[tpl] =  Zy.lib.template.template(
+                                                                              content,
+                                                                              null,
+                                                                              tokens
+                                                                          );
+
+                                        // run async callback
+                                        onsuccess(null);
+                                    }
+                                },
+                                tokens,
+                                null,
+                                onsuccess
+                            );
+                        });
+
+                    })(path[i]);
+                }
+            }
+
+
+            // setup async stack and finish callback (to render templates into structure)
+            Zy.lib.async.series(
+                stack,
+                function (err, results) {
+                    // render output
+                    var content = '';
+
+                    for (var i in path) {
+                        content += Zy.output._template_cache[path[i]]();
+                    }
+
+                    // send rendered templates into structure
+                    Zy.output._cache_structure(function (structure) {
+                        // - load template, compile to function and cache
+                        Zy.output._template_cache[url.pathname] =
+                            Zy.lib.template.template(
+                                structure,
+                                null,
+                                {
+                                    'content': content
+                                }
+                            );
+
+                        // - send output
+                        Zy.output.send(
+                            response,
+                            {
+                                'content':  Zy.output._template_cache[url.pathname](tokens),
+                                'params':   {
+                                    'Content-Type': 'text/html'
+                                }
+                            }
+                        );
+                    });
+                }
+            );
+
+        } else {
+            // serve ready-cached template
+            Zy.output.send(
+                response,
+                {
+                    'content':  Zy.output._template_cache[url.pathname](tokens),
+                    'params':   {
+                        'Content-Type': 'text/html'
+                    }
+                }
+            );
+        }
+    },
+
+    _output: function (response, filename, params, data, onerror, onsuccess) {
+        // check that file exists
+        Zy.lib.fs.exists(filename, function (exists) {
+            if (exists) {
+                Zy.lib.fs.readFile(filename, function (error, content) {
+                    if (!error) {
+                        // no error, execute 200 callback
+                        params[200](content, data, onsuccess);
 
                     } else {
                         // send 500 response
