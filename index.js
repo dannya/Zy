@@ -635,7 +635,7 @@ Zy.start = function (config) {
                         (typeof Zy.config.safeDirectories[Zy.location.path(url.pathname)] !== 'undefined')) {
 
                         // an allowable location, modify to a retrievable reference
-                        output = '.' + url.pathname;
+                        output = url.pathname;
 
                     } else {
                         // not an allowable location
