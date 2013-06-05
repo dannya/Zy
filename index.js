@@ -53,12 +53,14 @@ var d = function (value, type) {
 
 // import Zy requirements
 Zy.lib = {
-    http:       require('http'),
-    url:        require('url'),
-    fs:         require('fs'),
-    path:       require('path'),
-    async:      require('async'),
-    template:   require('dot')
+    http:           require('http'),
+    session:        require('session'),
+    url:            require('url'),
+    querystring:    require('querystring'),
+    fs:             require('fs'),
+    path:           require('path'),
+    async:          require('async'),
+    template:       require('dot')
 };
 
 
@@ -84,18 +86,24 @@ Zy.config = {
     },
 
     routes: {
-        '/': function () {
-            return 'Welcome to Zy!';
+        'GET': {
+            '/': function () {
+                return 'Welcome to Zy!';
+            },
+
+            403: function () {
+                return '403';
+            },
+            404: function () {
+                return '404';
+            },
+            500: function () {
+                return '500';
+            }
         },
 
-        403: function () {
-            return '403';
-        },
-        404: function () {
-            return '404';
-        },
-        500: function () {
-            return '500';
+        'POST': function () {
+            return 'Welcome to Zy! (POST)';
         }
     },
 
@@ -140,7 +148,11 @@ Zy.util = {
 // define routing functionality
 Zy.routing = {
     get: function (id) {
-        return Zy.config.routes[id] || Zy.config.routes[404] || Zy.config.routes['/'];
+        return Zy.config.routes['GET'][id] || Zy.config.routes['GET'][404] || Zy.config.routes['GET']['/'];
+    },
+
+    post: function (id) {
+        return Zy.config.routes['POST'][id] || Zy.config.routes['POST']['/'];
     }
 };
 
@@ -197,6 +209,7 @@ Zy.output = {
     FILE:       1,
     TEMPLATE:   2,
     FUNCTION:   3,
+    OBJECT:     4,
 
     type: function (output) {
         if (typeof output === 'string') {
@@ -206,6 +219,9 @@ Zy.output = {
             } else {
                 return Zy.output.FILE;
             }
+
+        } else if (typeof output === 'object') {
+            return Zy.output.OBJECT;
 
         } else if (typeof output === 'function') {
             return Zy.output.FUNCTION;
@@ -265,7 +281,92 @@ Zy.output = {
         } else {
             response.end();
         }
+    },
 
+    redirect: function (response, location) {
+        response.statusCode = 302;
+        response.setHeader('Location', location);
+        response.end();
+    },
+
+    complete: function (request, response, output) {
+        // process output...
+        var outputType = Zy.output.type(output);
+
+        if (outputType === Zy.output.FILE) {
+            // file...
+            // - load file
+            var content = Zy.output.load(
+                response,
+                output,
+                {
+                    200: function (content) {
+                        // get content type
+                        var ext         = Zy.lib.path.extname(output),
+                            contentType = Zy.config.contentType[ext];
+
+                        if (typeof contentType !== 'string') {
+                            // not found in contentType mapping, default to HTML
+                            contentType = 'text/html';
+                        }
+
+                        // - send output
+                        Zy.output.send(
+                            response,
+                            {
+                                'content':  content,
+                                'params':   {
+                                    'Content-Type': contentType
+                                }
+                            }
+                        );
+                    }
+                }
+            );
+
+        } else if (outputType === Zy.output.TEMPLATE) {
+            // template...
+            Zy.output._output_template(
+                response,
+                output,
+                { }
+            );
+
+        } else if (outputType === Zy.output.FUNCTION) {
+            // function...
+            // - get output
+            var content = output(request, response);
+
+            // - send output?
+            if (typeof content === 'string') {
+                // only handle content output if function returns a string, otherwise
+                // assume the function handles output itself
+                Zy.output.send(
+                    response,
+                    {
+                        'content': content
+                    }
+                );
+            }
+        }
+    },
+
+    post: function (request, response, oncomplete) {
+        // check for login request
+        var post_data = '';
+
+        request.on('data', function (data) {
+            post_data += data.toString();
+        });
+
+        request.on('end', function () {
+            // execute oncomplete callback, passing in POST data
+            oncomplete(
+                request,
+                response,
+                Zy.lib.querystring.parse(post_data)
+            );
+        });
     },
 
     _template_cache: { },
@@ -342,6 +443,13 @@ Zy.output = {
         }
 
 
+        // add default values to tokens
+        tokens = tokens || {};
+        if (typeof tokens['mode'] == 'undefined') {
+            tokens['mode'] = 'index';
+        }
+
+
         // cache / serve cache...
         if (typeof Zy.output._template_cache[path] != 'function') {
             // cache template to a function, then serve it
@@ -356,7 +464,7 @@ Zy.output = {
                                                                   structure,
                                                                   null,
                                                                   {
-                                                                      'content': content
+                                                                      'content':    content
                                                                   }
                                                               );
 
@@ -624,89 +732,78 @@ Zy.start = function (config) {
             var url = Zy.location.parse(request.url, true);
 
             // look for specified route...
-            var output = Zy.config.routes[url.pathname];
+            var output = Zy.config.routes[request.method][url.pathname];
 
             if (typeof output === 'undefined') {
-                // route not found, check if reference is to an allowable file location...
-                if (Zy.location.type(url.pathname) === Zy.location.FILE) {
-                    // a file...
-                    // - check if it is in an allowable location? (default: yes)
-                    if ((typeof Zy.config.safeDirectories !== 'object') ||
-                        (typeof Zy.config.safeDirectories[Zy.location.path(url.pathname)] !== 'undefined')) {
-
-                        // an allowable location, modify to a retrievable reference
-                        output = url.pathname;
-
+                // route not found...
+                if (request.method === 'POST') {
+                    // use common POST handler?
+                    if (typeof Zy.config.routes[request.method] == 'function') {
+                        output = Zy.config.routes[request.method];
                     } else {
-                        // not an allowable location
-                        output = Zy.routing.get(403);
+                        output = Zy.routing.get(404);
                     }
 
                 } else {
-                    // not a file, default to 404 page
-                    output = Zy.routing.get(404);
+                    // check if reference is to an allowable file location...
+                    if (Zy.location.type(url.pathname) === Zy.location.FILE) {
+                        // a file...
+                        // - check if it is in an allowable location? (default: yes)
+                        if ((typeof Zy.config.safeDirectories !== 'object') ||
+                            (typeof Zy.config.safeDirectories[Zy.location.path(url.pathname)] !== 'undefined')) {
+
+                            // an allowable location, modify to a retrievable reference
+                            output = url.pathname;
+
+                        } else {
+                            // not an allowable location
+                            output = Zy.routing.get(403);
+                        }
+
+                    } else {
+                        // not a file, default to 404 page
+                        output = Zy.routing.get(404);
+                    }
                 }
             }
 
 
-            // process output...
-            var outputType = Zy.output.type(output);
+            // check if output has additional requirements (passed as an object)
+            if (typeof output == 'object') {
+                var reqs = output[0];
 
-            if (outputType === Zy.output.FILE) {
-                // file...
-                // - load file
-                var content = Zy.output.load(
-                    response,
-                    output,
-                    {
-                        200: function (content) {
-                            // get content type
-                            var ext         = Zy.lib.path.extname(output),
-                                contentType = Zy.config.contentType[ext];
+                if ((typeof reqs['auth'] == 'boolean') && (reqs['auth'] === true)) {
+                    try {
+                        Zy.lib.session.read(function (session) {
+                            console.log(session);
 
-                            if (typeof contentType !== 'string') {
-                                // not found in contentType mapping, default to HTML
-                                contentType = 'text/html';
+                            // route requires authentication...
+                            if ((typeof session == 'undefined') ||
+                                (typeof session.username == 'undefined') ||
+                                (typeof session.password == 'undefined')) {
+
+                                // not authenticated, direct to index
+                                Zy.output.complete(request, response, Zy.routing.get('/'));
+
+                            } else {
+                                // authenticated, continue
+                                Zy.output.complete(request, response, output[1]);
                             }
+                        });
 
-                            // - send output
-                            Zy.output.send(
-                                response,
-                                {
-                                    'content':  content,
-                                    'params':   {
-                                        'Content-Type': contentType
-                                    }
-                                }
-                            );
-                        }
+                    } catch (e) {
+                        // session store is not operational, direct to main page
+                        Zy.output.complete(request, response, Zy.routing.get('/'));
                     }
-                );
 
-            } else if (outputType === Zy.output.TEMPLATE) {
-                // template...
-                Zy.output._output_template(
-                    response,
-                    output,
-                    { }
-                );
-
-            } else if (outputType === Zy.output.FUNCTION) {
-                // function...
-                // - get output
-                var content = output(request, response);
-
-                // - send output?
-                if (typeof content === 'string') {
-                    // only handle content output if function returns a string, otherwise
-                    // assume the function handles output itself
-                    Zy.output.send(
-                        response,
-                        {
-                            'content': content
-                        }
-                    );
+                } else {
+                    // authentication not required, continue
+                    Zy.output.complete(request, response, output[1]);
                 }
+
+            } else {
+                // simple path definition, continue
+                Zy.output.complete(request, response, output);
             }
         })
         .listen(Zy.config.port);
