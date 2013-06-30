@@ -380,7 +380,7 @@ Zy.output = {
                 {
                     200: function (content, tokens) {
                         // - load template, compile to function and cache
-                        Zy.output._template_cache[path] = Zy.lib.template.template(content, null, def);
+                        Zy.output._template_cache[path] = Zy.lib.template.template(content, null, tokens);
 
                         // - send output
                         Zy.output.send(
