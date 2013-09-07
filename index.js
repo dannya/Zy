@@ -58,7 +58,7 @@ Zy.lib = {
     fs:         require('fs'),
     path:       require('path'),
     async:      require('async'),
-    template:   require('dot')
+    template:   require('nunjucks')
 };
 
 
@@ -200,7 +200,7 @@ Zy.output = {
 
     type: function (output) {
         if (typeof output === 'string') {
-            if (output.indexOf('.dot') !== -1) {
+            if (output.indexOf('.tpl') !== -1) {
                 return Zy.output.TEMPLATE;
 
             } else {
@@ -279,13 +279,13 @@ Zy.output = {
                 {
                     200: function (content, tokens) {
                         // - load template, compile to function and cache
-                        Zy.output._template_cache[path] = Zy.lib.template.template(content, null, def);
+                        Zy.output._template_cache[path] = new Zy.lib.template.Template(content);
 
                         // - send output
                         Zy.output.send(
                             response,
                             {
-                                'content':  Zy.output._template_cache[path](tokens),
+                                'content':  Zy.output._template_cache[path].render(tokens),
                                 'params':   {
                                     'Content-Type': 'text/html'
                                 }
@@ -311,7 +311,7 @@ Zy.output = {
     },
 
     _cache_structure: function (callback) {
-        var filename = Zy.location.filepath(Zy.config.location.original.templates + '/parts/structure.dot');
+        var filename = Zy.location.filepath(Zy.config.location.original.templates + '/parts/structure.tpl');
 
         // check that file exists
         Zy.lib.fs.exists(filename, function (exists) {
