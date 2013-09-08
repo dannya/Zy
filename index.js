@@ -53,12 +53,13 @@ var d = function (value, type) {
 
 // import Zy requirements
 Zy.lib = {
-    http:       require('http'),
-    url:        require('url'),
-    fs:         require('fs'),
-    path:       require('path'),
-    async:      require('async'),
-    template:   require('nunjucks')
+    http:           require('http'),
+    url:            require('url'),
+    fs:             require('fs'),
+    path:           require('path'),
+    async:          require('async'),
+    template:       require('nunjucks'),
+    mongoclient:    require('mongodb').MongoClient
 };
 
 
@@ -271,7 +272,7 @@ Zy.output = {
     _template_cache: { },
 
     _output_template: function (response, path, tokens) {
-        if (typeof Zy.output._template_cache[path] != 'function') {
+        if (typeof Zy.output._template_cache[path] == 'undefined') {
             // cache template to a function, then serve it
             Zy.output._output(
                 response,
@@ -298,10 +299,11 @@ Zy.output = {
 
         } else {
             // serve ready-cached template
+            d('1');
             Zy.output.send(
                 response,
                 {
-                    'content':  Zy.output._template_cache[path](tokens),
+                    'content':  Zy.output._template_cache[path].render(tokens),
                     'params':   {
                         'Content-Type': 'text/html'
                     }
@@ -343,7 +345,7 @@ Zy.output = {
 
 
         // cache / serve cache...
-        if (typeof Zy.output._template_cache[path] != 'function') {
+        if (typeof Zy.output._template_cache[path] == 'undefined') {
             // cache template to a function, then serve it
             Zy.output._output(
                 response,
@@ -352,19 +354,20 @@ Zy.output = {
                     200: function (content, tokens) {
                         Zy.output._cache_structure(function (structure) {
                             // - load template, compile to function and cache
-                            Zy.output._template_cache[path] = Zy.lib.template.template(
-                                                                  structure,
-                                                                  null,
-                                                                  {
-                                                                      'content': content
-                                                                  }
-                                                              );
+                            Zy.output._template_cache[path] = new Zy.lib.template.Template(structure);
 
                             // - send output
                             Zy.output.send(
                                 response,
                                 {
-                                    'content':  Zy.output._template_cache[path](tokens),
+                                    'content':  Zy.output._template_cache[path].render(
+                                        Zy.util.merge(
+                                            {
+                                                'content': content
+                                            },
+                                            tokens
+                                        )
+                                    ),
                                     'params':   {
                                         'Content-Type': 'text/html'
                                     }
@@ -378,10 +381,11 @@ Zy.output = {
 
         } else {
             // serve ready-cached template
+            d('2');
             Zy.output.send(
                 response,
                 {
-                    'content':  Zy.output._template_cache[path](tokens),
+                    'content':  Zy.output._template_cache[path].render(tokens),
                     'params':   {
                         'Content-Type': 'text/html'
                     }
@@ -399,90 +403,71 @@ Zy.output = {
         // parse url
         var url = Zy.location.parse(request.url, true);
 
-        // cache / serve cache...
-        if (typeof Zy.output._template_cache[url.pathname] != 'function') {
-            // cache all templates to functions, then serve
-            var stack = [];
+        // cache all templates to functions, then serve
+        var stack = [];
 
-            for (var i in path) {
-                if (typeof Zy.output._template_cache[path[i]] != 'function') {
-                    (function (tpl) {
-                        stack.push(function (onsuccess) {
-                            Zy.output._output(
-                                response,
-                                Zy.location.filepath(tpl),
-                                {
-                                    200: function (content, tokens, onsuccess) {
-                                        Zy.output._template_cache[tpl] =  Zy.lib.template.template(
-                                                                              content,
-                                                                              null,
-                                                                              tokens
-                                                                          );
-
-                                        // run async callback
-                                        onsuccess(null);
-                                    }
-                                },
-                                tokens,
-                                null,
-                                onsuccess
-                            );
-                        });
-
-                    })(path[i]);
-                }
-            }
-
-
-            // setup async stack and finish callback (to render templates into structure)
-            Zy.lib.async.series(
-                stack,
-                function (err, results) {
-                    // render output
-                    var content = '';
-
-                    for (var i in path) {
-                        content += Zy.output._template_cache[path[i]]();
-                    }
-
-                    // send rendered templates into structure
-                    Zy.output._cache_structure(function (structure) {
-                        // - load template, compile to function and cache
-                        Zy.output._template_cache[url.pathname] =
-                            Zy.lib.template.template(
-                                structure,
-                                null,
-                                {
-                                    'content': content
-                                }
-                            );
-
-                        // - send output
-                        Zy.output.send(
+        for (var i in path) {
+            if (typeof Zy.output._template_cache[path[i]] == 'undefined') {
+                (function (tpl) {
+                    stack.push(function (onsuccess) {
+                        Zy.output._output(
                             response,
+                            Zy.location.filepath(tpl),
                             {
-                                'content':  Zy.output._template_cache[url.pathname](tokens),
-                                'params':   {
-                                    'Content-Type': 'text/html'
+                                200: function (content, tokens, onsuccess) {
+                                    Zy.output._template_cache[tpl] = new Zy.lib.template.Template(content.toString('utf-8'));
+
+                                    // run async callback
+                                    onsuccess(null);
                                 }
-                            }
+                            },
+                            tokens,
+                            null,
+                            onsuccess
                         );
                     });
-                }
-            );
 
-        } else {
-            // serve ready-cached template
-            Zy.output.send(
-                response,
-                {
-                    'content':  Zy.output._template_cache[url.pathname](tokens),
-                    'params':   {
-                        'Content-Type': 'text/html'
-                    }
-                }
-            );
+                })(path[i]);
+            }
         }
+
+
+        // setup async stack and finish callback (to render templates into structure)
+        Zy.lib.async.series(
+            stack,
+            function (err, results) {
+                // render output
+                var content = '';
+
+                for (var i in path) {
+                    content += Zy.output._template_cache[path[i]].render(tokens);
+                }
+
+                // send rendered templates into structure
+                Zy.output._cache_structure(function (structure) {
+                    // - load template, compile to function and cache
+                    Zy.output._template_cache[url.pathname] = new Zy.lib.template.Template(structure.toString('utf-8'));
+
+                    // - send output
+                    Zy.output.send(
+                        response,
+                        {
+                            'content':  Zy.output._template_cache[url.pathname].render(
+                                Zy.util.merge(
+                                    {
+                                        'content': content
+                                    },
+                                    tokens
+                                )
+                            ),
+                            'params':   {
+                                'Content-Type': 'text/html'
+                            }
+                        }
+                    );
+                });
+            }
+        );
     },
 
     _output: function (response, filename, params, data, onerror, onsuccess) {
