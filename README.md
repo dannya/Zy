@@ -1,3 +1,5 @@
+> *This codebase is old, and probably should not be used in production. It remains available for educational / historical purposes.*
+
 Zy
 ==
 A small and fast NodeJS routing and presentation web framework.
